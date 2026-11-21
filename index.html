@@ -4068,15 +4068,30 @@
   });
 
   // Real-time Firestore listener across all devices & browsers
-  signInAnonymously(auth).catch(() => {});
-  onSnapshot(sharedDocRef, (snapshot) => {
-    if (snapshot.exists()) {
-      const remote = snapshot.data();
-      if (!remote.updatedAt || remote.updatedAt >= (serializeSharedState().updatedAt || 0)) {
-        applySharedSnapshot(remote);
-      }
+  let lastAppliedUpdatedAt = 0;
+  try {
+    const cachedRaw = localStorage.getItem("lms_v1_shared_state");
+    if (cachedRaw) {
+      const parsedCache = JSON.parse(cachedRaw);
+      if (parsedCache && parsedCache.updatedAt) lastAppliedUpdatedAt = parsedCache.updatedAt;
     }
-  });
+  } catch (e) {}
+
+  function attachRealtimeListener() {
+    onSnapshot(sharedDocRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const remote = snapshot.data();
+        if (!remote.updatedAt || remote.updatedAt >= lastAppliedUpdatedAt) {
+          lastAppliedUpdatedAt = remote.updatedAt || Date.now();
+          applySharedSnapshot(remote);
+        }
+      }
+    });
+  }
+
+  signInAnonymously(auth)
+    .then(() => attachRealtimeListener())
+    .catch(() => attachRealtimeListener());
 </script>
 
 <script>
